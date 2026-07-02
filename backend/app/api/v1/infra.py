@@ -1,8 +1,8 @@
 """Infrastructure API endpoints.
 
-GET /health  → liveness probe (already in main.py, kept for container orchestration)
 GET /status  → deep health: app version, database, AI provider, market provider
 GET /version → application version only
+GET /metrics → application metrics snapshot (when enabled)
 
 These are public endpoints (no authentication required).
 """
@@ -31,6 +31,22 @@ async def get_status() -> dict:
     db_url = settings.DATABASE_URL or ""
     masked_db = _mask_db_url(db_url)
 
+    # Gather AI cache stats
+    cache_stats = {}
+    try:
+        from app.modules.ai.cache.cache_layer import get_ai_cache
+        cache_stats = get_ai_cache().stats()
+    except Exception:
+        pass
+
+    # Gather AI telemetry stats
+    ai_stats = {}
+    try:
+        from app.modules.ai.telemetry import get_ai_telemetry
+        ai_stats = get_ai_telemetry().get_global_stats()
+    except Exception:
+        pass
+
     return {
         "success": True,
         "message": "Application status retrieved successfully",
@@ -56,6 +72,8 @@ async def get_status() -> dict:
                 "metrics": settings.METRICS_ENABLED,
                 "tracing": settings.TRACING_ENABLED,
             },
+            "cache": cache_stats,
+            "ai": ai_stats,
         },
     }
 
@@ -75,6 +93,22 @@ async def get_version() -> dict:
             "name": settings.APP_NAME,
             "version": settings.APP_VERSION,
         },
+    }
+
+
+@router.get(
+    "/metrics",
+    summary="Application metrics",
+    description="Returns a snapshot of collected metrics when observability is enabled.",
+)
+async def get_metrics() -> dict:
+    """Return the current metrics snapshot."""
+    from app.observability.metrics import get_metrics
+    metrics = get_metrics()
+    return {
+        "success": True,
+        "message": "Metrics retrieved successfully",
+        "data": metrics.snapshot(),
     }
 
 

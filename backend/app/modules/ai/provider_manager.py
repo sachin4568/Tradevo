@@ -225,15 +225,15 @@ class AIProviderManager:
         return results
 
     def get_health_status(self) -> list[ProviderHealth]:
-        """Get health status for all registered providers."""
-        import asyncio
+        """Get health status for all registered providers (sync stub).
+
+        For async health checks, use health_check_all() instead.
+        This method returns the circuit breaker state without
+        making actual health check calls.
+        """
         results = []
         for entry in self._providers.values():
-            try:
-                loop = asyncio.get_running_loop()
-                healthy = loop.run_until_complete(entry.provider.health_check())
-            except RuntimeError:
-                healthy = True  # No event loop in sync context
+            healthy = not entry.circuit_breaker.is_open
             results.append(ProviderHealth(entry, healthy))
         return results
 

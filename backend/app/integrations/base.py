@@ -6,13 +6,13 @@ BaseIntegrationClient to get consistent error handling and resilience.
 
 import abc
 import asyncio
+import logging
 import time
 from typing import Any
 
 from app.core.exceptions import ExternalServiceError
-from app.observability.logging import get_logger
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class CircuitBreaker:
@@ -56,8 +56,8 @@ class CircuitBreaker:
         if self._failure_count >= self.failure_threshold:
             self._state = "open"
             logger.warning(
-                "circuit_breaker_opened",
-                failure_count=self._failure_count,
+                "circuit_breaker_opened failure_count=%d",
+                self._failure_count,
             )
 
 
@@ -99,6 +99,8 @@ class BaseIntegrationClient(abc.ABC):
                 message="Service temporarily unavailable (circuit open)",
             )
 
+        last_error: Exception | None = None
+
         for attempt in range(1, self.max_retries + 1):
             try:
                 result = await asyncio.wait_for(
@@ -107,26 +109,35 @@ class BaseIntegrationClient(abc.ABC):
                 )
                 self._circuit_breaker.record_success()
                 return result
-            except TimeoutError:
-                ExternalServiceError(
+            except asyncio.TimeoutError:
+                last_error = ExternalServiceError(
                     message=f"Provider call timed out after {self.timeout}s",
                 )
                 logger.warning(
-                    "provider_timeout",
-                    attempt=attempt,
-                    max_retries=self.max_retries,
+                    "provider_timeout attempt=%d max_retries=%d",
+                    attempt,
+                    self.max_retries,
                 )
+                self._circuit_breaker.record_failure()
+            except ExternalServiceError:
+                raise
             except Exception as exc:
+                last_error = exc
                 logger.warning(
-                    "provider_error",
-                    attempt=attempt,
-                    error=str(exc),
+                    "provider_error attempt=%d error=%s",
+                    attempt,
+                    str(exc),
                 )
+                self._circuit_breaker.record_failure()
 
-        self._circuit_breaker.record_failure()
+            # Exponential backoff before next retry
+            if attempt < self.max_retries:
+                backoff = min(2 ** (attempt - 1), 10)
+                await asyncio.sleep(backoff)
+
         raise ExternalServiceError(
-            message="External service call failed after all retries",
-        )
+            message=f"External service call failed after {self.max_retries} retries"
+        ) from last_error
 
     @abc.abstractmethod
     async def health_check(self) -> bool:

@@ -6,9 +6,8 @@ with a full provider factory that supports:
 - Configuration-driven provider instantiation
 - Automatic circuit breaker setup from config
 - Provider manager population
-
-The factory is a pure function — it reads settings, creates providers,
-and returns an initialized AIProviderManager. No side effects.
+- Per-provider API keys, models, and timeouts
+- Runtime provider switching
 """
 
 from __future__ import annotations
@@ -50,16 +49,22 @@ def create_provider_manager() -> AIProviderManager:
         logger.info("provider_factory_mock_registered")
         return manager
 
-    # Live provider configuration
+    # ─── Live Provider Configuration ───
     llm_provider = settings.LLM_PROVIDER
     cb = CircuitBreaker(failure_threshold=threshold, recovery_timeout=recovery)
 
-    if llm_provider == "openai":
-        _register_openai(manager, cb, settings)
-    elif llm_provider == "anthropic":
-        _register_anthropic(manager, cb, settings)
-    elif llm_provider == "google":
-        _register_google(manager, cb, settings)
+    _PROVIDER_REGISTRY = {
+        "openai": _register_openai,
+        "anthropic": _register_anthropic,
+        "google": _register_gemini,
+        "gemini": _register_gemini,
+        "openrouter": _register_openrouter,
+        "ollama": _register_ollama,
+    }
+
+    registrar = _PROVIDER_REGISTRY.get(llm_provider)
+    if registrar:
+        registrar(manager, cb, settings)
 
     # Always register mock as fallback (lowest priority)
     from app.integrations.llm.mock import MockLLMProvider
@@ -86,17 +91,20 @@ def _register_openai(
     settings,
 ) -> None:
     """Register an OpenAI provider if the API key is available."""
-    if not settings.LLM_API_KEY:
+    api_key = settings.OPENAI_API_KEY or settings.LLM_API_KEY
+    if not api_key:
         logger.warning("provider_factory_openai_no_key")
         return
     try:
         from app.integrations.llm.openai_provider import OpenAIProvider
         provider = OpenAIProvider(
-            api_key=settings.LLM_API_KEY,
-            model=settings.LLM_MODEL,
+            api_key=api_key,
+            model=settings.OPENAI_MODEL,
+            base_url=settings.OPENAI_BASE_URL,
+            timeout=settings.OPENAI_TIMEOUT,
         )
         manager.register("openai", provider, priority=1, circuit_breaker=cb)
-        logger.info("provider_factory_openai_registered")
+        logger.info("provider_factory_openai_registered model=%s", settings.OPENAI_MODEL)
     except ImportError:
         logger.warning("provider_factory_openai_import_failed")
     except Exception:
@@ -109,41 +117,93 @@ def _register_anthropic(
     settings,
 ) -> None:
     """Register an Anthropic provider if the API key is available."""
-    if not settings.LLM_API_KEY:
+    api_key = settings.ANTHROPIC_API_KEY or settings.LLM_API_KEY
+    if not api_key:
         logger.warning("provider_factory_anthropic_no_key")
         return
     try:
         from app.integrations.llm.anthropic_provider import AnthropicProvider
         provider = AnthropicProvider(
-            api_key=settings.LLM_API_KEY,
-            model=settings.LLM_MODEL,
+            api_key=api_key,
+            model=settings.ANTHROPIC_MODEL,
+            base_url=settings.ANTHROPIC_BASE_URL,
+            timeout=settings.ANTHROPIC_TIMEOUT,
         )
         manager.register("anthropic", provider, priority=1, circuit_breaker=cb)
-        logger.info("provider_factory_anthropic_registered")
+        logger.info("provider_factory_anthropic_registered model=%s", settings.ANTHROPIC_MODEL)
     except ImportError:
         logger.warning("provider_factory_anthropic_import_failed")
     except Exception:
         logger.exception("provider_factory_anthropic_error")
 
 
-def _register_google(
+def _register_gemini(
     manager: AIProviderManager,
     cb: CircuitBreaker,
     settings,
 ) -> None:
-    """Register a Google provider if the API key is available."""
-    if not settings.LLM_API_KEY:
-        logger.warning("provider_factory_google_no_key")
+    """Register a Gemini provider if the API key is available."""
+    api_key = settings.GEMINI_API_KEY or settings.LLM_API_KEY
+    if not api_key:
+        logger.warning("provider_factory_gemini_no_key")
         return
     try:
-        from app.integrations.llm.google_provider import GoogleProvider
-        provider = GoogleProvider(
-            api_key=settings.LLM_API_KEY,
-            model=settings.LLM_MODEL,
+        from app.integrations.llm.gemini_provider import GeminiProvider
+        provider = GeminiProvider(
+            api_key=api_key,
+            model=settings.GEMINI_MODEL,
+            timeout=settings.GEMINI_TIMEOUT,
         )
-        manager.register("google", provider, priority=1, circuit_breaker=cb)
-        logger.info("provider_factory_google_registered")
+        manager.register("gemini", provider, priority=1, circuit_breaker=cb)
+        logger.info("provider_factory_gemini_registered model=%s", settings.GEMINI_MODEL)
     except ImportError:
-        logger.warning("provider_factory_google_import_failed")
+        logger.warning("provider_factory_gemini_import_failed")
     except Exception:
-        logger.exception("provider_factory_google_error")
+        logger.exception("provider_factory_gemini_error")
+
+
+def _register_openrouter(
+    manager: AIProviderManager,
+    cb: CircuitBreaker,
+    settings,
+) -> None:
+    """Register an OpenRouter provider if the API key is available."""
+    api_key = settings.OPENROUTER_API_KEY or settings.LLM_API_KEY
+    if not api_key:
+        logger.warning("provider_factory_openrouter_no_key")
+        return
+    try:
+        from app.integrations.llm.openrouter_provider import OpenRouterProvider
+        provider = OpenRouterProvider(
+            api_key=api_key,
+            model=settings.OPENROUTER_MODEL,
+            base_url=settings.OPENROUTER_BASE_URL,
+            timeout=settings.OPENROUTER_TIMEOUT,
+        )
+        manager.register("openrouter", provider, priority=1, circuit_breaker=cb)
+        logger.info("provider_factory_openrouter_registered model=%s", settings.OPENROUTER_MODEL)
+    except ImportError:
+        logger.warning("provider_factory_openrouter_import_failed")
+    except Exception:
+        logger.exception("provider_factory_openrouter_error")
+
+
+def _register_ollama(
+    manager: AIProviderManager,
+    cb: CircuitBreaker,
+    settings,
+) -> None:
+    """Register an Ollama provider (no API key required)."""
+    try:
+        from app.integrations.llm.ollama_provider import OllamaProvider
+        provider = OllamaProvider(
+            model=settings.OLLAMA_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
+            timeout=settings.OLLAMA_TIMEOUT,
+        )
+        manager.register("ollama", provider, priority=1, circuit_breaker=cb)
+        logger.info("provider_factory_ollama_registered model=%s", settings.OLLAMA_MODEL)
+    except ImportError:
+        logger.warning("provider_factory_ollama_import_failed")
+    except Exception:
+        logger.exception("provider_factory_ollama_error")
