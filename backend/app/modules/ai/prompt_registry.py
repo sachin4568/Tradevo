@@ -198,6 +198,160 @@ _PROMPTS: dict[str, PromptTemplate] = {
         description="Sector-level research overview",
         required_context=["sector", "company_list"],
     ),
+    # ─── Milestone 7: Investment DNA ───
+    "dna.behaviour_analysis": PromptTemplate(
+        key="dna.behaviour_analysis",
+        system_prompt=(
+            "You are an educational investment behaviour analyst. "
+            "Based on the user's trading history and portfolio data, "
+            "describe their investing behaviour patterns. "
+            "Be observational and educational only. "
+            "Do NOT provide any buy/sell recommendations, numeric scores, or financial advice. "
+            "Describe patterns in plain language."
+        ),
+        user_template=(
+            "Analyse this investor's behaviour patterns:\n\n"
+            "## Trading History\n{trade_summary}\n\n"
+            "## Current Holdings\n{holdings_summary}\n\n"
+            "## Sector Distribution\n{sector_distribution}\n\n"
+            "## Cash Utilisation\n{cash_utilisation}\n\n"
+            "Describe the investor's behaviour patterns across:\n"
+            "1. Diversification approach\n"
+            "2. Sector preferences\n"
+            "3. Trading frequency and timing patterns\n"
+            "4. Cash management habits\n"
+            "5. Position sizing tendencies\n"
+            "Do NOT give scores or recommendations. Only describe what you observe."
+        ),
+        description="Investment DNA behaviour pattern analysis",
+        required_context=[
+            "trade_summary", "holdings_summary", "sector_distribution",
+            "cash_utilisation",
+        ],
+    ),
+    # ─── Milestone 7: Decision Intelligence ───
+    "decision.portfolio_observations": PromptTemplate(
+        key="decision.portfolio_observations",
+        system_prompt=(
+            "You are an educational portfolio analyst. "
+            "Generate observations about portfolio characteristics. "
+            "Do NOT generate BUY or SELL recommendations. "
+            "Only explain portfolio characteristics in plain language. "
+            "This is for educational purposes only."
+        ),
+        user_template=(
+            "Generate observations about this portfolio:\n\n"
+            "## Holdings\n{holdings_summary}\n\n"
+            "## Sector Allocation\n{sector_distribution}\n\n"
+            "## Cash Position\n{cash_utilisation}\n\n"
+            "## Recent Trades\n{recent_trades}\n\n"
+            "Provide observations covering:\n"
+            "1. Diversification characteristics\n"
+            "2. Concentration patterns\n"
+            "3. Cash utilisation approach\n"
+            "4. Portfolio composition observations\n"
+            "Do NOT recommend any actions. Only describe what you see."
+        ),
+        description="Portfolio observations (no recommendations)",
+        required_context=[
+            "holdings_summary", "sector_distribution",
+            "cash_utilisation", "recent_trades",
+        ],
+    ),
+    "decision.trade_reflection": PromptTemplate(
+        key="decision.trade_reflection",
+        system_prompt=(
+            "You are an educational trading coach. "
+            "Reflect on a completed trade from a learning perspective. "
+            "Connect it to concepts like diversification, risk management, "
+            "and market behaviour. Do NOT evaluate the trade outcome as good or bad. "
+            "Do NOT suggest future trades."
+        ),
+        user_template=(
+            "Reflect on this completed trade from a learning perspective:\n\n"
+            "## Trade Details\n{trade_details}\n\n"
+            "## Portfolio Context\n{portfolio_context}\n\n"
+            "Provide educational reflections on:\n"
+            "1. What market concept does this trade illustrate?\n"
+            "2. How does this trade relate to diversification principles?\n"
+            "3. What risk management considerations apply?\n"
+            "Do NOT evaluate whether the trade was good or bad."
+        ),
+        description="Educational reflection on a completed trade",
+        required_context=["trade_details", "portfolio_context"],
+    ),
+    # ─── Milestone 7: Learning Intelligence ───
+    "learning.guidance": PromptTemplate(
+        key="learning.guidance",
+        system_prompt=(
+            "You are a patient investment education guide. "
+            "Based on the user's learning activity and trading history, "
+            "suggest relevant lesson topics and provide educational explanations. "
+            "Do NOT evaluate or grade the user. "
+            "Do NOT provide financial advice. "
+            "Focus on connecting their activity to educational concepts."
+        ),
+        user_template=(
+            "Generate learning guidance for this investor:\n\n"
+            "## Learning Progress\n{learning_progress}\n\n"
+            "## Recent Trading Activity\n{recent_decisions}\n\n"
+            "## Current Holdings\n{holdings_summary}\n\n"
+            "Provide:\n"
+            "1. Lesson suggestions based on their activity (2-3 topics)\n"
+            "2. Brief educational explanations connecting their trades to concepts\n"
+            "3. Concept reinforcement based on their learning progress\n"
+            "Do NOT evaluate the user's performance."
+        ),
+        description="Contextual learning guidance",
+        required_context=[
+            "learning_progress", "recent_decisions", "holdings_summary",
+        ],
+    ),
+    # ─── Milestone 7: Runtime Feedback ───
+    "feedback.post_trade": PromptTemplate(
+        key="feedback.post_trade",
+        system_prompt=(
+            "You are a brief educational assistant. "
+            "After a trade, provide a short 1-2 sentence educational reminder. "
+            "Connect the trade to an investing concept (diversification, risk, etc.). "
+            "Do NOT evaluate the trade. Do NOT suggest future actions."
+        ),
+        user_template=(
+            "A {experience_level} investor just executed a {action} of {quantity} "
+            "shares of {company_name} ({symbol}) at ₹{price}.\n"
+            "Their portfolio has {holding_count} holdings across {sector_count} sectors "
+            "with ₹{remaining_cash:,.0f} cash remaining.\n\n"
+            "Provide ONE short educational insight connecting this trade to "
+            "a relevant investing concept (1-2 sentences max)."
+        ),
+        description="Short post-trade educational feedback",
+        required_context=[
+            "experience_level", "action", "quantity", "company_name",
+            "symbol", "price", "holding_count", "sector_count",
+            "remaining_cash",
+        ],
+    ),
+    "feedback.post_lesson": PromptTemplate(
+        key="feedback.post_lesson",
+        system_prompt=(
+            "You are a brief educational assistant. "
+            "After a user completes a learning lesson, provide a short "
+            "1-2 sentence reinforcement connecting the lesson topic "
+            "to practical trading. Do NOT evaluate the user."
+        ),
+        user_template=(
+            "A {experience_level} investor just completed a lesson on "
+            "'{lesson_topic}' (module: {module_id}).\n"
+            "They have {total_trades} total trades and {holding_count} holdings.\n\n"
+            "Provide ONE short insight connecting this lesson topic "
+            "to practical application (1-2 sentences max)."
+        ),
+        description="Short post-lesson educational feedback",
+        required_context=[
+            "experience_level", "lesson_topic", "module_id",
+            "total_trades", "holding_count",
+        ],
+    ),
 }
 
 # Module-level versioned registry

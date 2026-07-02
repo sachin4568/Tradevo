@@ -12,6 +12,7 @@ Revision #5: Emits LearningSessionStarted, LearningSessionCompleted,
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -384,6 +385,113 @@ class LearningService:
             "createdAt": session.created_at.isoformat() if session.created_at else "",
             "updatedAt": session.updated_at.isoformat() if session.updated_at else "",
         }
+
+    # ─── AI Orchestration (Milestone 7.1) ───
+
+    async def get_ai_guidance(self, user_id: str, user: Any) -> dict | None:
+        """Generate learning guidance for a user.
+
+        Orchestrates data fetching + AI engine call.  Returns the
+        AIResponseEnvelope as a dict, or None if AI is unavailable.
+        """
+        from app.modules.ai.engines.services import (
+            LearningIntelligenceService,
+            _get_request_manager,
+        )
+        from app.modules.ai.repository import DecisionTimelineRepository
+        from app.modules.ai.utils.helpers import envelope_to_api_dict
+        from app.modules.market.repository import CompanyRepository
+        from app.modules.portfolio.repository import (
+            HoldingRepository,
+            PortfolioRepository,
+        )
+
+        rm = _get_request_manager()
+        if rm is None:
+            return None
+
+        portfolio_repo = PortfolioRepository(self.repo.db)
+        holding_repo = HoldingRepository(self.repo.db)
+        company_repo = CompanyRepository(self.repo.db)
+        decision_repo = DecisionTimelineRepository(self.repo.db)
+
+        portfolio = await portfolio_repo.get_by_user_id(user_id)
+        if portfolio is None:
+            return None
+
+        holdings = await holding_repo.list_by_portfolio(portfolio.id)
+        sessions = await self.repo.list_by_user(user_id, limit=20)
+        decisions = await decision_repo.list_by_user(user_id, limit=20)
+
+        companies_by_id: dict = {}
+        for h in holdings:
+            if h.company_id not in companies_by_id:
+                c = await company_repo.get_by_id(h.company_id)
+                if c:
+                    companies_by_id[h.company_id] = c
+        for d in decisions:
+            if d.company_id not in companies_by_id:
+                c = await company_repo.get_by_id(d.company_id)
+                if c:
+                    companies_by_id[d.company_id] = c
+
+        service = LearningIntelligenceService(rm)
+        response = await service.get_guidance(
+            user=user,
+            learning_sessions=sessions,
+            decisions=decisions,
+            holdings=holdings,
+            companies_by_id=companies_by_id,
+        )
+
+        if response is None:
+            return None
+        return envelope_to_api_dict(response)
+
+    async def get_ai_lesson_feedback(
+        self, user_id: str, lesson_id: str, module_id: str, user: Any
+    ) -> dict | None:
+        """Generate post-lesson educational feedback.
+
+        Orchestrates data fetching + AI engine call.  Returns the
+        AIResponseEnvelope as a dict, or None if AI is unavailable.
+        """
+        from app.modules.ai.engines.services import (
+            RuntimeFeedbackService,
+            _get_request_manager,
+        )
+        from app.modules.ai.utils.helpers import envelope_to_api_dict
+        from app.modules.portfolio.repository import (
+            HoldingRepository,
+            PortfolioRepository,
+            TransactionRepository,
+        )
+
+        rm = _get_request_manager()
+
+        portfolio_repo = PortfolioRepository(self.repo.db)
+        holding_repo = HoldingRepository(self.repo.db)
+        txn_repo = TransactionRepository(self.repo.db)
+
+        portfolio = await portfolio_repo.get_by_user_id(user_id)
+        if portfolio is None:
+            return None
+
+        holdings = await holding_repo.list_by_portfolio(portfolio.id)
+        transactions = await txn_repo.list_by_portfolio(portfolio.id, limit=1000)
+
+        service = RuntimeFeedbackService(rm)
+        response = await service.post_lesson_feedback(
+            user=user,
+            lesson_id=lesson_id,
+            module_id=module_id,
+            total_trades=len(transactions),
+            holding_count=len(holdings),
+        )
+
+        if response is None:
+            return None
+        return envelope_to_api_dict(response)
 
     @staticmethod
     def _extract_lesson_progress(progress: dict) -> dict:

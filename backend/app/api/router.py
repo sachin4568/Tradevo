@@ -16,6 +16,7 @@ from app.api.v1.portfolio import router as portfolio_router
 from app.api.v1.research import router as research_router
 from app.api.v1.transactions import router as transactions_router
 from app.api.v1.watchlist import router as watchlist_router
+from app.api.v1.intelligence import router as intelligence_router
 
 api_router = APIRouter()
 
@@ -43,12 +44,11 @@ api_router.include_router(learning_router, prefix="/learning")
 # ─── Research (Milestone 5) ───
 api_router.include_router(research_router, prefix="/research")
 
+# ─── AI Intelligence (Milestone 7) ───
+api_router.include_router(intelligence_router, prefix="/intelligence")
+
 # ─── Notifications (Milestone 3) ───
 # api_router.include_router(notifications_router, prefix="/notifications")
 
-# ─── AI Intelligence (Milestone 5+) ───
+# ─── Future milestones (Milestone 8+) ───
 # api_router.include_router(intelligence_router, prefix="/intelligence")
-# api_router.include_router(decisions_router, prefix="/decisions")
-# api_router.include_router(observations_router, prefix="/observations")
-# api_router.include_router(alerts_router, prefix="/alerts")
-# api_router.include_router(investment_dna_router, prefix="/investment-dna")

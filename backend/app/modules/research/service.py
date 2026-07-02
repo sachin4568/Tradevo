@@ -1,17 +1,19 @@
 """ResearchService — AI-powered company research.
 
 Orchestrates the research pipeline:
-1. Build context from company, portfolio, news, and decisions
-2. Look up the prompt template from the registry
-3. Call the LLM provider
-4. Parse and persist the research report
+1. Validate company exists
+2. Fetch user, portfolio, news data
+3. Build context via AIContextBuilder
+4. Call AI through AIRequestManager (via AIResearchService)
+5. Assemble report via ResearchAssembler
+6. Persist report
+7. Emit event
 
-The service is decoupled from specific LLM implementations via
-the LLMProvider interface. The MockLLMProvider is used for development.
+The service orchestrates only.  Report assembly is delegated to
+ResearchAssembler (Milestone 7.1).
 """
 
 import logging
-import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,14 +22,14 @@ from app.core.exceptions import (
     NotFoundError,
 )
 from app.core.utils import generate_entity_id
-from app.integrations.llm.base import GenerateConfig
-from app.integrations.llm.factory import create_llm_provider
-from app.integrations.news.factory import create_news_provider
 from app.modules.ai.context.builder import AIContextBuilder
-from app.modules.ai.prompt_registry import get_prompt
+from app.modules.ai.engines.services import AIResearchService
+from app.modules.ai.provider_factory import create_provider_manager
+from app.modules.ai.request_manager import AIRequestManager
 from app.modules.auth.models import User
 from app.modules.market.repository import CompanyRepository, MarketRepository
 from app.modules.portfolio.repository import HoldingRepository, PortfolioRepository
+from app.modules.research.assembler import ResearchAssembler
 from app.modules.research.events import ResearchReportGenerated
 from app.modules.research.models import ResearchReport
 from app.modules.research.repository import ResearchRepository
@@ -45,7 +47,21 @@ class ResearchService:
         self.holding_repo = HoldingRepository(db)
         self.market_repo = MarketRepository(db)
         self.context_builder = AIContextBuilder()
+        self._assembler = ResearchAssembler()
         self._event_hooks: list = []
+        self._ai_service = self._init_ai_service()
+
+    def _init_ai_service(self) -> AIResearchService | None:
+        """Initialize AI research service via AI Request Manager."""
+        try:
+            pm = create_provider_manager()
+            if pm.provider_count == 0:
+                return None
+            rm = AIRequestManager(pm)
+            return AIResearchService(rm)
+        except Exception:
+            logger.exception("Failed to initialize AI research service")
+            return None
 
     def register_event_hook(self, hook) -> None:
         """Register a callback for research events."""
@@ -73,10 +89,10 @@ class ResearchService:
 
         Pipeline:
         1. Validate company exists
-        2. Fetch user, portfolio, news, decisions
+        2. Fetch user, portfolio, news
         3. Build AI context
-        4. Render prompt from registry
-        5. Call LLM provider
+        4. Call AI via AIRequestManager
+        5. Assemble report via ResearchAssembler
         6. Persist report
         7. Emit event
 
@@ -98,9 +114,7 @@ class ResearchService:
         if company is None:
             raise NotFoundError(message="Company not found")
 
-        # Step 2: Fetch user (we need experience_level and risk_preference)
-        # The user is fetched from the auth repo, but we receive it via API
-        # We'll use a lightweight approach — fetch from the DB
+        # Step 2: Fetch user
         from app.modules.auth.repository import AuthRepository
         auth_repo = AuthRepository(self.repo.db)
         user = await auth_repo.get_by_id(user_id)
@@ -125,32 +139,23 @@ class ResearchService:
             news=news if news else None,
         )
 
-        # Step 5: Get and render prompt
-        try:
-            template = get_prompt(prompt_key)
-        except KeyError:
-            raise NotFoundError(
-                message=f"Prompt template '{prompt_key}' not found",
-                error_code="PROMPT_NOT_FOUND",
-            )
-
-        rendered_prompt = template.render(context)
-
-        # Step 6: Call LLM
-        llm = create_llm_provider()
-        if llm is None:
+        # Step 5: Call AI via AIRequestManager
+        if self._ai_service is None:
             raise LLMServiceUnavailableError()
 
-        start_ms = int(time.monotonic() * 1000)
-        settings = __import__("app.config", fromlist=["get_settings"]).get_settings()
-        config = GenerateConfig(
-            temperature=settings.LLM_TEMPERATURE,
-            max_tokens=settings.LLM_MAX_TOKENS,
-            model=settings.LLM_MODEL,
+        response = await self._ai_service.generate(
+            prompt_key=prompt_key,
+            context=context,
         )
 
-        response = await llm.generate(rendered_prompt, context, config)
-        elapsed_ms = int(time.monotonic() * 1000) - start_ms
+        if response is None:
+            raise LLMServiceUnavailableError()
+
+        # Step 6: Assemble persistence data via ResearchAssembler
+        persistence_data = self._assembler.assemble_for_persistence(
+            ai_response=response,
+            prompt_key=prompt_key,
+        )
 
         # Step 7: Persist report
         report = await self.repo.create(
@@ -158,18 +163,12 @@ class ResearchService:
             user_id=user_id,
             company_id=company_id,
             source_type=source_type,
-            summary=response.content[:500] if response.content else None,
-            analysis={
-                "version": 1,
-                "data": {
-                    "fullContent": response.content,
-                    "promptKey": prompt_key,
-                },
-            },
-            prompt_key=prompt_key,
-            model_used=response.model,
-            tokens_used=response.usage.get("total_tokens", 0),
-            generation_time_ms=elapsed_ms,
+            summary=persistence_data["summary"],
+            analysis=persistence_data["analysis"],
+            prompt_key=persistence_data["prompt_key"],
+            model_used=persistence_data["model_used"],
+            tokens_used=persistence_data["tokens_used"],
+            generation_time_ms=persistence_data["generation_time_ms"],
         )
 
         # Emit event
@@ -187,7 +186,7 @@ class ResearchService:
             company_id,
             prompt_key,
             response.usage.get("total_tokens", 0),
-            elapsed_ms,
+            response.duration_ms,
         )
 
         return self._report_to_dict(report, company)

@@ -1,10 +1,19 @@
-"""PortfolioService — portfolio read operations.
+"""PortfolioService — portfolio read operations and AI orchestration.
 
 Handles portfolio summary, holdings listing, and transaction history.
 Trade execution is handled by TradeExecutionService.
 
-This service is read-only; all mutations go through TradeExecutionService.
+AI orchestration methods (Milestone 7.1):
+- get_ai_dna: Investment DNA analysis via AI engine
+- get_ai_observations: Portfolio observations via AI engine
+- get_ai_trade_feedback: Post-trade educational feedback via AI engine
+
+These methods encapsulate the data-fetching + AI engine call pattern
+that was previously in the intelligence API endpoint.
 """
+
+import logging
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,9 +25,11 @@ from app.modules.portfolio.repository import (
     TransactionRepository,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class PortfolioService:
-    """Read-only portfolio operations.
+    """Portfolio read operations and AI-enhanced analysis.
 
     Provides portfolio summary, holdings with live company data,
     and transaction history for display.
@@ -167,6 +178,148 @@ class PortfolioService:
             "limit": limit,
             "offset": offset,
         }
+
+    # ─── AI Orchestration (Milestone 7.1) ───
+
+    async def get_ai_dna(self, user_id: str, user: Any) -> dict | None:
+        """Generate Investment DNA analysis for a user.
+
+        Orchestrates data fetching + AI engine call.  Returns the
+        AIResponseEnvelope as a dict, or None if AI is unavailable.
+        """
+        from app.modules.ai.engines.services import (
+            InvestmentDNAService,
+            _get_request_manager,
+        )
+        from app.modules.ai.utils.helpers import envelope_to_api_dict
+
+        rm = _get_request_manager()
+        if rm is None:
+            return None
+
+        portfolio = await self.portfolio_repo.get_by_user_id(user_id)
+        if portfolio is None:
+            return None
+
+        holdings = await self.holding_repo.list_by_portfolio(portfolio.id)
+        transactions = await self.transaction_repo.list_by_portfolio(
+            portfolio.id, limit=100
+        )
+        companies_by_id = await self._build_companies_map(holdings)
+
+        service = InvestmentDNAService(rm)
+        response = await service.analyse_behaviour(
+            user=user,
+            portfolio=portfolio,
+            holdings=holdings,
+            transactions=transactions,
+            companies_by_id=companies_by_id,
+        )
+
+        if response is None:
+            return None
+        return envelope_to_api_dict(response)
+
+    async def get_ai_observations(self, user_id: str) -> dict | None:
+        """Generate portfolio observations for a user.
+
+        Orchestrates data fetching + AI engine call.  Returns the
+        AIResponseEnvelope as a dict, or None if AI is unavailable.
+        """
+        from app.modules.ai.engines.services import (
+            DecisionIntelligenceService,
+            _get_request_manager,
+        )
+        from app.modules.ai.utils.helpers import envelope_to_api_dict
+
+        rm = _get_request_manager()
+        if rm is None:
+            return None
+
+        portfolio = await self.portfolio_repo.get_by_user_id(user_id)
+        if portfolio is None:
+            return None
+
+        holdings = await self.holding_repo.list_by_portfolio(portfolio.id)
+        transactions = await self.transaction_repo.list_by_portfolio(
+            portfolio.id, limit=100
+        )
+        companies_by_id = await self._build_companies_map(holdings)
+
+        service = DecisionIntelligenceService(rm)
+        response = await service.get_portfolio_observations(
+            portfolio=portfolio,
+            holdings=holdings,
+            transactions=transactions,
+            companies_by_id=companies_by_id,
+        )
+
+        if response is None:
+            return None
+        return envelope_to_api_dict(response)
+
+    async def get_ai_trade_feedback(
+        self, user_id: str, transaction_id: str, user: Any
+    ) -> dict | None:
+        """Generate post-trade educational feedback.
+
+        Orchestrates data fetching + AI engine call.  Returns the
+        AIResponseEnvelope as a dict, or None if AI is unavailable.
+        """
+        from app.modules.ai.engines.services import (
+            RuntimeFeedbackService,
+            _get_request_manager,
+        )
+        from app.modules.ai.utils.helpers import envelope_to_api_dict
+
+        rm = _get_request_manager()
+
+        txn = await self.transaction_repo.get_by_id(transaction_id)
+        if txn is None or txn.portfolio_id is None:
+            return None
+
+        portfolio = await self.portfolio_repo.get_by_id(txn.portfolio_id)
+        if portfolio is None:
+            return None
+
+        holdings = await self.holding_repo.list_by_portfolio(portfolio.id)
+        company = await self.company_repo.get_by_id(txn.company_id)
+        if company is None:
+            return None
+
+        sectors: set[str] = set()
+        for h in holdings:
+            c = await self.company_repo.get_by_id(h.company_id)
+            if c:
+                sectors.add(c.sector)
+
+        service = RuntimeFeedbackService(rm)
+        response = await service.post_trade_feedback(
+            user=user,
+            transaction=txn,
+            company=company,
+            holding_count=len(holdings),
+            sector_count=len(sectors),
+            remaining_cash=float(portfolio.virtual_cash),
+        )
+
+        if response is None:
+            return None
+        return envelope_to_api_dict(response)
+
+    # ─── Private helpers ───
+
+    async def _build_companies_map(
+        self, holdings: list[Any]
+    ) -> dict[str, Any]:
+        """Fetch companies for all holdings and return id->company map."""
+        companies: dict[str, Any] = {}
+        for h in holdings:
+            if h.company_id not in companies:
+                c = await self.company_repo.get_by_id(h.company_id)
+                if c:
+                    companies[h.company_id] = c
+        return companies
 
     @staticmethod
     def _calc_pnl_percent(avg_price: float, current_price: float) -> float:

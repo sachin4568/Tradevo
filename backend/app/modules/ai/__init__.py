@@ -1,4 +1,4 @@
-"""AI Execution Platform (Milestone 6).
+"""AI Execution Platform (Milestone 6, refined in 7.1).
 
 Centralized AI infrastructure that all business modules use.
 No business module ever interacts with AI providers directly.
@@ -6,6 +6,7 @@ No business module ever interacts with AI providers directly.
 Public API:
 - AIRequestManager: Orchestrates all AI requests (retry, failover, caching, telemetry)
 - AIProviderManager: Manages provider lifecycle and health
+- ResponseComposer: Builds AIResponseEnvelope with provenance metadata
 - create_provider_manager(): Factory for provider setup
 - get_ai_cache() / reset_ai_cache(): Cache access
 - get_ai_telemetry() / reset_ai_telemetry(): Telemetry access
@@ -22,6 +23,7 @@ from app.modules.ai.cache.cache_layer import (
     get_ai_cache,
     reset_ai_cache,
 )
+from app.modules.ai.composer import ResponseComposer
 from app.modules.ai.parsers.response_parser import AIResponseParser
 from app.modules.ai.parsers.response_validator import AIResponseValidator
 from app.modules.ai.provider_factory import create_provider_manager
@@ -46,6 +48,8 @@ from app.modules.ai.telemetry import (
 __all__ = [
     # Core orchestrator
     "AIRequestManager",
+    # Response composition
+    "ResponseComposer",
     # Provider management
     "AIProviderManager",
     "create_provider_manager",
