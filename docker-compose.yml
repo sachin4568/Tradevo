@@ -1,0 +1,48 @@
+services:
+  tradevo:
+    build: .
+    container_name: tradevo-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://tradevo:tradevo@db:5432/tradevo
+      - AI_PROVIDER=mock
+      - MARKET_PROVIDER=mock
+      - NEWS_PROVIDER=mock
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production-min-32-chars-long!!}
+      - LOG_LEVEL=INFO
+      - METRICS_ENABLED=true
+      - SECURITY_HEADERS_ENABLED=true
+      - RATE_LIMIT_ENABLED=true
+      - DEBUG=false
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  db:
+    image: postgres:16-alpine
+    container_name: tradevo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tradevo
+      POSTGRES_PASSWORD: tradevo
+      POSTGRES_DB: tradevo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tradevo"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:

@@ -200,7 +200,7 @@ export default function Learning() {
         <StatCard
           icon={Wallet}
           label="Virtual Balance"
-          value={`₹${virtualCash.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 0 })}`}
+          value={`₹${virtualCash.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           sub="Available capital"
         />
         <StatCard
