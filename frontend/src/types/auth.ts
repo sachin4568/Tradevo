@@ -2,9 +2,20 @@ export interface User {
   id: string
   name: string
   email: string
+  phone?: string
+  dob?: string
+  occupation?: string
+  address?: string
+  bio?: string
   experienceLevel: 'beginner' | 'intermediate' | 'advanced'
   riskPreference: 'conservative' | 'moderate' | 'aggressive'
   createdAt: string
+  // KYC
+  pan?: string
+  aadhaar?: string
+  // Payment
+  bankAccount?: string
+  upiId?: string
 }
 
 export interface LoginPayload {

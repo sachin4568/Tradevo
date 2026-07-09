@@ -13,6 +13,16 @@ export interface PerformanceDataPoint {
   current: number
 }
 
+/** OHLC candlestick data point */
+export interface OHLCVDataPoint {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
 /** Data point for the learning reflection timeline */
 export interface ReflectionDataPoint {
   transactionId: string
@@ -40,3 +50,15 @@ export type OutcomeDescription =
   | 'Slight downward movement'
   | 'Moderate downward movement'
   | 'Significant downward movement'
+
+/** Timeline filter options for charts */
+export type TimelineFilter = '1D' | '1W' | '1M' | '6M' | '1Y' | '5Y' | 'MAX'
+
+/** Chart display mode */
+export type ChartMode = 'line' | 'candlestick'
+
+/** Data point for a simple line chart (e.g. portfolio value over time) */
+export interface LineDataPoint {
+  date: string
+  value: number
+}

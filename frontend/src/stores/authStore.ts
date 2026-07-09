@@ -17,7 +17,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>
   register: (name: string, email: string, password: string) => Promise<void>
   logout: () => void
-  updateProfile: (updates: Partial<Pick<User, 'name' | 'experienceLevel' | 'riskPreference'>>) => void
+  updateProfile: (updates: Partial<User>) => void
   _hydrate: () => void
 }
 
@@ -44,9 +44,18 @@ const DEMO_USER: User = {
   id: 'usr-demo-001',
   name: 'Demo Investor',
   email: 'demo@tradevo.ai',
+  phone: '+91 98765 43210',
   experienceLevel: 'intermediate',
   riskPreference: 'moderate',
   createdAt: new Date().toISOString(),
+  dob: '1995-06-15',
+  occupation: 'Software Engineer',
+  address: 'Mumbai, Maharashtra, India',
+  bio: 'Aspiring value investor learning the ropes of the Indian stock market.',
+  pan: 'ABCDE1234F',
+  aadhaar: '1234 5678 9012',
+  bankAccount: 'HDFC Bank ****4521',
+  upiId: 'demo@upi',
 }
 
 const DEMO_TOKEN = 'demo_jwt_tradevo_dev_bypass_token'

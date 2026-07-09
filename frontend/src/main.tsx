@@ -5,6 +5,18 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
 
+// ─── Theme Hydration ───
+import { useThemeStore } from './stores/themeStore'
+
+// Apply theme class before React renders to avoid flash
+const theme = useThemeStore.getState().theme
+document.documentElement.classList.toggle('light', theme === 'light')
+
+// Subscribe to theme changes
+useThemeStore.subscribe((state) => {
+  document.documentElement.classList.toggle('light', state.theme === 'light')
+})
+
 // ─── AI Platform Initialization ───
 // Configure the mock provider (if needed) and register prompt templates.
 // The aiRequestManager singleton is already created in its own module.

@@ -1,60 +1,192 @@
 import { useState } from 'react'
-import { User, Shield, CheckCircle2, Loader2 } from 'lucide-react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import { User, Shield, Pencil, X, Check, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import type { User as UserType } from '@/types/auth'
 
-const schema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  experienceLevel: z.enum(['beginner', 'intermediate', 'advanced']),
-  riskPreference: z.enum(['conservative', 'moderate', 'aggressive']),
-})
+// ─── EditableField Component ───
 
-type FormData = z.infer<typeof schema>
+function EditableField({
+  label,
+  value,
+  onSave,
+  type = 'text',
+  multiline = false,
+  placeholder,
+}: {
+  label: string
+  value?: string
+  onSave: (val: string) => void
+  type?: string
+  multiline?: boolean
+  placeholder?: string
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value ?? '')
 
-const experienceLabels: Record<UserType['experienceLevel'], string> = {
-  beginner: 'Beginner',
-  intermediate: 'Intermediate',
-  advanced: 'Advanced',
+  function startEdit() {
+    setDraft(value ?? '')
+    setEditing(true)
+  }
+
+  function cancel() {
+    setDraft(value ?? '')
+    setEditing(false)
+  }
+
+  function save() {
+    onSave(draft)
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div>
+        <label className="mb-1.5 block text-[12.5px] font-medium text-tx-secondary">{label}</label>
+        {multiline ? (
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={placeholder}
+            rows={3}
+            className="w-full rounded-lg border border-border-subtle bg-surface-input px-3.5 py-2.5 text-[13.5px] text-tx-primary outline-none transition-colors placeholder:text-tx-muted focus:border-accent/40 resize-none"
+            autoFocus
+          />
+        ) : (
+          <input
+            type={type}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={placeholder}
+            className="w-full rounded-lg border border-border-subtle bg-surface-input px-3.5 py-2.5 text-[13.5px] text-tx-primary outline-none transition-colors placeholder:text-tx-muted focus:border-accent/40"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') save()
+              if (e.key === 'Escape') cancel()
+            }}
+          />
+        )}
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            onClick={save}
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-surface-0 transition-colors hover:bg-accent-hover cursor-pointer"
+          >
+            <Check className="h-3.5 w-3.5" />
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={cancel}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-2 px-3.5 py-1.5 text-[12.5px] font-medium text-tx-secondary transition-colors hover:text-tx-primary cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5" />
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="group">
+      <label className="mb-1.5 block text-[12.5px] font-medium text-tx-secondary">{label}</label>
+      <div
+        onClick={startEdit}
+        className="flex cursor-pointer items-center gap-2 rounded-lg border border-transparent px-3.5 py-2.5 text-[13.5px] text-tx-primary transition-colors hover:border-border-subtle hover:bg-surface-2"
+      >
+        <span className={value ? '' : 'text-tx-muted italic'}>{value || placeholder || 'Not set'}</span>
+        <Pencil className="ml-auto h-3.5 w-3.5 shrink-0 text-tx-muted opacity-0 transition-opacity group-hover:opacity-100" />
+      </div>
+    </div>
+  )
 }
 
-const riskLabels: Record<UserType['riskPreference'], string> = {
-  conservative: 'Conservative — Prioritize capital protection',
-  moderate: 'Moderate — Balanced growth and risk',
-  aggressive: 'Aggressive — Maximize returns',
+// ─── Editable Select Field ───
+
+function EditableSelect<T extends string>({
+  label,
+  value,
+  options,
+  onSave,
+}: {
+  label: string
+  value: T
+  options: Array<{ value: T; label: string }>
+  onSave: (val: T) => void
+}) {
+  const [editing, setEditing] = useState(false)
+
+  if (editing) {
+    return (
+      <div>
+        <label className="mb-1.5 block text-[12.5px] font-medium text-tx-secondary">{label}</label>
+        <div className="flex flex-wrap gap-2">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => {
+                onSave(o.value)
+                setEditing(false)
+              }}
+              className={`rounded-lg border px-4 py-2 text-[13px] transition-colors cursor-pointer ${
+                value === o.value
+                  ? 'border-accent/40 bg-accent-subtle text-accent'
+                  : 'border-border bg-surface-2 text-tx-secondary hover:text-tx-primary'
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-[13px] text-tx-muted hover:text-tx-primary cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const current = options.find((o) => o.value === value)
+
+  return (
+    <div className="group">
+      <label className="mb-1.5 block text-[12.5px] font-medium text-tx-secondary">{label}</label>
+      <div
+        onClick={() => setEditing(true)}
+        className="flex cursor-pointer items-center gap-2 rounded-lg border border-transparent px-3.5 py-2.5 text-[13.5px] text-tx-primary transition-colors hover:border-border-subtle hover:bg-surface-2"
+      >
+        <span>{current?.label ?? value}</span>
+        <Pencil className="ml-auto h-3.5 w-3.5 shrink-0 text-tx-muted opacity-0 transition-opacity group-hover:opacity-100" />
+      </div>
+    </div>
+  )
 }
+
+// ─── Main Profile Page ───
 
 export default function Profile() {
   const { user, updateProfile } = useAuth()
   const [saved, setSaved] = useState(false)
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting, isDirty },
-  } = useForm<FormData>({
-    resolver: zodResolver(schema),
-    values: user
-      ? {
-          name: user.name,
-          experienceLevel: user.experienceLevel,
-          riskPreference: user.riskPreference,
-        }
-      : undefined,
-  })
-
   if (!user) return null
 
-  async function onSubmit(data: FormData) {
-    try {
-      updateProfile(data)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    } catch {
-      // Profile update is local-only in M6
-    }
+  function handleUpdate(field: keyof UserType, value: string) {
+    updateProfile({ [field]: value })
+    showSaved()
+  }
+
+  function handleSelectUpdate<K extends 'experienceLevel' | 'riskPreference'>(field: K, value: UserType[K]) {
+    updateProfile({ [field]: value })
+    showSaved()
+  }
+
+  function showSaved() {
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
   }
 
   const initials = user.name
@@ -63,6 +195,18 @@ export default function Profile() {
     .join('')
     .slice(0, 2)
     .toUpperCase()
+
+  const experienceOptions: Array<{ value: UserType['experienceLevel']; label: string }> = [
+    { value: 'beginner', label: 'Beginner' },
+    { value: 'intermediate', label: 'Intermediate' },
+    { value: 'advanced', label: 'Advanced' },
+  ]
+
+  const riskOptions: Array<{ value: UserType['riskPreference']; label: string }> = [
+    { value: 'conservative', label: 'Conservative' },
+    { value: 'moderate', label: 'Moderate' },
+    { value: 'aggressive', label: 'Aggressive' },
+  ]
 
   return (
     <div className="space-y-5">
@@ -76,14 +220,18 @@ export default function Profile() {
       {/* Profile header card */}
       <div className="flex items-center gap-4 rounded-xl border border-border bg-surface-1 p-5">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-subtle">
-          <span className="text-[16px] font-bold text-accent">
-            {initials}
-          </span>
+          <span className="text-[16px] font-bold text-accent">{initials}</span>
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[15px] font-semibold text-tx-primary">
-            {user.name}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="truncate text-[15px] font-semibold text-tx-primary">{user.name}</h2>
+            {saved && (
+              <span className="flex items-center gap-1 text-[12px] text-tx-success">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Saved
+              </span>
+            )}
+          </div>
           <p className="text-[13px] text-tx-muted">{user.email}</p>
           <p className="mt-1 text-[12px] text-tx-muted">
             Member since{' '}
@@ -95,110 +243,116 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Editable form */}
+      {/* Personal Information */}
       <div className="rounded-xl border border-border bg-surface-1">
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <User className="h-4 w-4 text-tx-muted" />
-          <h3 className="text-[13px] font-semibold text-tx-primary">
-            Personal Information
-          </h3>
+          <h3 className="text-[13px] font-semibold text-tx-primary">Personal Information</h3>
         </div>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 p-5">
-          <div>
-            <label className="mb-1.5 block text-[12.5px] font-medium text-tx-secondary">
-              Full Name
-            </label>
-            <input
-              type="text"
-              {...register('name')}
-              className="w-full max-w-sm rounded-lg border border-border-subtle bg-surface-input px-3.5 py-2.5 text-[13.5px] text-tx-primary outline-none transition-colors placeholder:text-tx-muted focus:border-accent/40"
+        <div className="grid gap-x-6 gap-y-4 p-5 sm:grid-cols-2">
+          <EditableField
+            label="Full Name"
+            value={user.name}
+            onSave={(v) => handleUpdate('name', v)}
+            placeholder="Your name"
+          />
+          <EditableField
+            label="Email"
+            value={user.email}
+            onSave={(v) => handleUpdate('email', v)}
+            type="email"
+            placeholder="you@example.com"
+          />
+          <EditableField
+            label="Phone"
+            value={user.phone}
+            onSave={(v) => handleUpdate('phone', v)}
+            placeholder="+91 98765 43210"
+          />
+          <EditableField
+            label="Date of Birth"
+            value={user.dob}
+            onSave={(v) => handleUpdate('dob', v)}
+            type="date"
+            placeholder="YYYY-MM-DD"
+          />
+          <EditableField
+            label="Occupation"
+            value={user.occupation}
+            onSave={(v) => handleUpdate('occupation', v)}
+            placeholder="Your occupation"
+          />
+          <EditableField
+            label="Address"
+            value={user.address}
+            onSave={(v) => handleUpdate('address', v)}
+            placeholder="Your address"
+          />
+          <div className="sm:col-span-2">
+            <EditableField
+              label="Bio"
+              value={user.bio}
+              onSave={(v) => handleUpdate('bio', v)}
+              multiline
+              placeholder="Tell us about yourself"
             />
-            {errors.name && (
-              <p className="mt-1 text-[12px] text-tx-danger">
-                {errors.name.message}
-              </p>
-            )}
           </div>
-
-          <div>
-            <label className="mb-1.5 block text-[12.5px] font-medium text-tx-secondary">
-              Investment Experience
-            </label>
-            <div className="flex gap-3">
-              {(Object.keys(experienceLabels) as Array<UserType['experienceLevel']>).map(
-                (level) => (
-                  <label
-                    key={level}
-                    className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2.5 text-[13px] text-tx-secondary transition-colors has-[:checked]:border-accent/40 has-[:checked]:bg-accent-subtle has-[:checked]:text-accent cursor-pointer"
-                  >
-                    <input
-                      type="radio"
-                      value={level}
-                      {...register('experienceLevel')}
-                      className="accent-accent"
-                    />
-                    {experienceLabels[level]}
-                  </label>
-                ),
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-[12.5px] font-medium text-tx-secondary">
-              Risk Preference
-            </label>
-            <div className="flex flex-col gap-2">
-              {(Object.keys(riskLabels) as Array<UserType['riskPreference']>).map(
-                (level) => (
-                  <label
-                    key={level}
-                    className="flex items-center gap-3 rounded-lg border border-border bg-surface-2 px-4 py-3 text-[13px] text-tx-secondary transition-colors has-[:checked]:border-accent/40 has-[:checked]:bg-accent-subtle has-[:checked]:text-accent cursor-pointer"
-                  >
-                    <input
-                      type="radio"
-                      value={level}
-                      {...register('riskPreference')}
-                      className="accent-accent"
-                    />
-                    {riskLabels[level]}
-                  </label>
-                ),
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={isSubmitting || !isDirty}
-              className="flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-[13px] font-semibold text-surface-0 transition-colors hover:bg-accent-hover disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : saved ? (
-                <CheckCircle2 className="h-4 w-4" />
-              ) : null}
-              {saved ? 'Saved' : isSubmitting ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
 
-      {/* Security placeholder */}
+      {/* Investment Profile */}
       <div className="rounded-xl border border-border bg-surface-1">
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <Shield className="h-4 w-4 text-tx-muted" />
-          <h3 className="text-[13px] font-semibold text-tx-primary">
-            Security
-          </h3>
+          <h3 className="text-[13px] font-semibold text-tx-primary">Investment Profile</h3>
         </div>
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <Shield className="mb-2.5 h-8 w-8 text-tx-muted/40" />
-          <p className="max-w-xs text-[13px] text-tx-muted">
-            Password management and account security settings will be
-            configured here when the backend is connected.
-          </p>
+        <div className="grid gap-x-6 gap-y-4 p-5 sm:grid-cols-2">
+          <EditableSelect
+            label="Investment Experience"
+            value={user.experienceLevel}
+            options={experienceOptions}
+            onSave={(v) => handleSelectUpdate('experienceLevel', v)}
+          />
+          <EditableSelect
+            label="Risk Appetite"
+            value={user.riskPreference}
+            options={riskOptions}
+            onSave={(v) => handleSelectUpdate('riskPreference', v)}
+          />
+        </div>
+      </div>
+
+      {/* KYC & Payment */}
+      <div className="rounded-xl border border-border bg-surface-1">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <Shield className="h-4 w-4 text-tx-muted" />
+          <h3 className="text-[13px] font-semibold text-tx-primary">KYC & Payment</h3>
+        </div>
+        <div className="grid gap-x-6 gap-y-4 p-5 sm:grid-cols-2">
+          <EditableField
+            label="PAN Number"
+            value={user.pan}
+            onSave={(v) => handleUpdate('pan', v)}
+            placeholder="ABCDE1234F"
+          />
+          <EditableField
+            label="Aadhaar Number"
+            value={user.aadhaar}
+            onSave={(v) => handleUpdate('aadhaar', v)}
+            placeholder="1234 5678 9012"
+          />
+          <EditableField
+            label="Bank Account"
+            value={user.bankAccount}
+            onSave={(v) => handleUpdate('bankAccount', v)}
+            placeholder="Bank Name ****1234"
+          />
+          <EditableField
+            label="UPI ID"
+            value={user.upiId}
+            onSave={(v) => handleUpdate('upiId', v)}
+            placeholder="name@upi"
+          />
         </div>
       </div>
     </div>
